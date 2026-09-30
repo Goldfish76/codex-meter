@@ -22,6 +22,8 @@
 > **本项目基于 [Wangnov/codex-meter](https://github.com/Wangnov/codex-meter)（作者 Jun Zhao，MIT 许可）改进。**
 > 原项目最后更新于 2026 年 6 月（v0.2.19）。之后 OpenAI 调整了 Codex 的用量接口，套餐内用量在每日明细里一律记为 0 Credits，导致原版的「推算周总 Credits」和「推算周价值」永远停在「同步中」。这个版本修复了该问题，其余功能与原版一致。
 
+> **v0.3.1 更正：** v0.3.0 把 `daily-token-usage-breakdown` 接口的数值误当成了周额度百分比。这些数值其实是相对于所查时间段内用量最多那一天的比例，所以 v0.3.0 显示的「推算周总 Credits」和「推算周价值」是错的。请升级到 v0.3.1。
+
 <p align="center">
   <img src="./assets/screenshot-fork-estimate.jpg" width="70%" alt="改进版弹窗：按官方价目表推算周额度（示例数据）">
   <br>
@@ -49,35 +51,34 @@
 
 相对原版 v0.2.19：
 
-- **读取新的每日额度接口。** 官方分析页「按来源」图表使用的 `daily-token-usage-breakdown` 接口，会按天、按模型给出用掉了周额度的百分之几。改进版读取这个接口。
-- **恢复「推算周总 Credits」和「推算周价值」。** 用官方 Codex 价目表把每天的 Tokens 折算成 Credits，推算出 1% 周额度折合多少 Credits，进而得到整周额度。
+- **按官方价目表折算每日 Credits。** 每日明细里的 Credits 虽然是 0，Tokens 仍然有记录。改进版用官方 Codex 价目表给每天的 Tokens 计价。同一天用了多个模型时，按官方「按来源」图表接口 `daily-token-usage-breakdown` 给出的各模型占比拆分。
+- **恢复「推算周总 Credits」和「推算周价值」。** 公式与原版相同：本周期 Credits ÷ 官方已用比例，只是把记为 0 的 Credits 换成折算值。
 - **新增显示：**
   - 「本周期剩余额度比例」下方显示剩余额度约合多少 Credits。
-  - 新卡片「本周期已统计额度」。
-  - 明细表新增「额度占比」「折算 Credits」两列。
+  - 卡片「本周期折算 Credits」。
+  - 明细表的 Credits 列和折算金额列改用折算值。
   - Meter 图表在没有真实 Credits 时改用折算 Credits。
-  - CSV 导出新增 `limit_percent`、`estimated_credits` 两列。
+  - CSV 导出新增 `estimated_credits` 列。
 - **自动退回，不会比原版更差：**
-  - 遇到价目表里没有的新模型：改为按 Tokens 推算，显示「推算周总 Tokens」和「推算剩余 Tokens」。
+  - 遇到价目表里没有的新模型，或新接口请求失败：改为按 Tokens 推算（本周期 Tokens ÷ 官方已用比例），显示「推算周总 Tokens」和「推算剩余 Tokens」。
   - 账号有真实 Credits 记录（按 Credits 计费的套餐、或用了购买的 Credits）：沿用原版公式。
-  - 新接口请求失败：退回原版的「同步中」。
 - **移除原作者的 Chrome 应用商店自动发布流程。** 本仓库不发布到商店。
 
 ## 工作原理
 
-1. `/backend-api/wham/usage/daily-token-usage-breakdown` 返回每天、每个模型消耗的**周额度百分比**。
-2. `/backend-api/wham/analytics/daily-workspace-usage-counts` 返回每天的 **Tokens**，分为未缓存输入、缓存输入和输出。
-3. 用[官方 Codex 价目表](https://learn.chatgpt.com/docs/pricing)给当天的 Tokens 计价。同一天用了多个模型时，按各模型的额度占比拆分 Tokens，这里假设各模型的 Tokens 构成相近。当天 1% 周额度折合的 Credits 为：
+1. `/backend-api/wham/analytics/daily-workspace-usage-counts` 返回每天的 **Tokens**，分为未缓存输入、缓存输入和输出。套餐内用量的 Credits 在这里一律是 0。
+2. `/backend-api/wham/usage/daily-token-usage-breakdown`（官方「按来源」图表用的接口）按天、按模型拆分用量。它的数值是**相对于所查时间段内用量最多那一天**的比例，不是周额度百分比，所以这里只用它来算每天各模型的占比。
+3. 用[官方 Codex 价目表](https://learn.chatgpt.com/docs/pricing)给当天的 Tokens 计价。同一天用了多个模型时，按各模型的占比拆分 Tokens，这里假设各模型的 Tokens 构成相近：
 
    ```text
-   1% ≈ 1 ÷ Σ（模型 m 当天的额度百分比 ÷ 当天全部 Tokens 按模型 m 单价计价的 Credits）
+   当天折算 Credits = Σ 各模型占比 ÷ Σ（模型 m 的占比 ÷ 当天全部 Tokens 按模型 m 单价计价的 Credits）
    ```
 
-   只用一个模型的日子，就是「当天 Tokens 折算的 Credits ÷ 当天用掉的百分比」。
+   只用一个模型的日子，就是当天 Tokens 按该模型单价计价的 Credits。
 
-4. 本周期各天按额度百分比加权平均，得到「1% ≈ N Credits」。推算周总 Credits = N × 100，推算周价值 = 推算周总 Credits × US$40 / 1000（沿用原项目的换算假设）。
+4. 推算周总 Credits = 本周期每日折算 Credits 之和 ÷ 官方已用比例，推算周价值 = 推算周总 Credits × US$40 / 1000（沿用原项目的换算假设）。
 
-这个方法用一个个人套餐账号 37 天的数据验证过：只用 GPT-6 Astra 的日子和只用 GPT-5.6 Sol 的日子，两个模型单价相差 2.5 倍，算出的「1% 折合 Credits」相差不到 1%。这说明套餐内额度的消耗与价目表成正比。
+价目表和实际消耗的对应关系，用一个个人套餐账号 37 天的数据验证过：只用 GPT-6 Astra 的日子和只用 GPT-5.6 Sol 的日子，两个模型单价相差 2.5 倍，但按价目表折算后，和接口给出的相对用量仍然成同一比例（相差不到 1%）。这说明套餐内额度的消耗与价目表成正比。
 
 价目表写在 [`codex-meter-extension/shared/config.js`](./codex-meter-extension/shared/config.js) 的 `CREDIT_RATES` 里（2026-09-30 版本，单位为每 100 万 Tokens 的 Credits）：
 
@@ -102,7 +103,7 @@
 
 **方式 A：从 Releases 下载（推荐）**
 
-1. 打开 [Releases 页面](https://github.com/Goldfish76/codex-meter/releases/latest)，在 **Assets** 里下载 `codex-meter-extension-vX.Y.Z.zip`（当前为 v0.3.0）。
+1. 打开 [Releases 页面](https://github.com/Goldfish76/codex-meter/releases/latest)，在 **Assets** 里下载 `codex-meter-extension-vX.Y.Z.zip`（当前为 v0.3.1）。
 2. 把它解压到一个**固定的位置**，例如 `文档\codex-meter-extension`。在 Windows 上可以右键 zip，选「全部解压缩」。解压出来的文件夹里应该直接就有 `manifest.json`。
 
 > ⚠️ 浏览器是直接从这个文件夹加载扩展的。装好后**不要删除、移动或重命名**这个文件夹，否则扩展会失效。
@@ -132,7 +133,7 @@ git clone https://github.com/Goldfish76/codex-meter.git
    - Releases 方式：第 1 步解压出来的文件夹
    - 源码 ZIP 方式：`codex-meter-main\codex-meter-extension`
    - Git 方式：`codex-meter\codex-meter-extension`
-5. 列表里出现 **Codex Meter 0.3.0**，并且开关是打开的，就装好了。
+5. 列表里出现 **Codex Meter 0.3.1**，并且开关是打开的，就装好了。
 
 **Google Chrome**
 
@@ -140,7 +141,7 @@ git clone https://github.com/Goldfish76/codex-meter.git
 2. 打开右上角的 **「开发者模式」** 开关。
 3. 点左上角的 **「加载已解压的扩展程序」**。
 4. 同样选择里面直接有 `manifest.json` 的那个文件夹。
-5. 列表里出现 **Codex Meter 0.3.0**，就装好了。
+5. 列表里出现 **Codex Meter 0.3.1**，就装好了。
 
 ### 第 4 步：固定到工具栏（可选）
 
@@ -160,18 +161,18 @@ git clone https://github.com/Goldfish76/codex-meter.git
 | 卡片 | 含义 |
 |---|---|
 | 本周期剩余额度比例 | 官方周额度的剩余百分比（实时）。下方小字是剩余额度约合多少 Credits。 |
-| 本周期已统计额度 | 每日明细里本周期用掉的百分比合计，以及约合多少 Credits。每日明细通常比官方比例**滞后几个小时**，所以这个数可能比「100% − 剩余比例」小。 |
+| 本周期折算 Credits | 本周期每日 Tokens 按价目表折算的 Credits 合计。每日明细通常比官方比例**滞后几个小时**，最近的用量可能还没算进来。 |
 | 本周期总 Tokens | 本周期每日明细的 Tokens 合计。 |
-| 推算周总 Credits | 整周额度约合多少 Credits（1% × 100）。前缀的「高 / 中 / 低可信」取决于已统计的额度和本周期已过去的时间：已统计不到 10% 或周期开始不到 8 小时为低，不到 20% 或不到 24 小时为中。 |
+| 推算周总 Credits | 本周期折算 Credits ÷ 官方已用比例。前缀的「高 / 中 / 低可信」：已用不到 10%、周期开始不到 8 小时、或本周期数据明显不完整时为低，已用不到 20% 或周期开始不到 24 小时为中。 |
 | 输入缓存命中率 | 缓存输入 Tokens 占全部输入 Tokens 的比例。 |
 | 推算周价值 | 推算周总 Credits × US$40 / 1000。 |
 
-- 如果显示的是「推算周总 Tokens」和「推算剩余 Tokens」，说明你用了价目表里还没有的新模型，这时改为按 Tokens 推算。Tokens 推算的结果会随模型组合变化。
+- 如果显示的是「推算周总 Tokens」和「推算剩余 Tokens」，说明你用了价目表里还没有的新模型，或者新接口暂时不可用。这时改为按 Tokens 推算：本周期 Tokens ÷ 官方已用比例。结果会随模型组合变化。
 - 如果显示的是「本周期已用 Credits」，说明你的账号有真实 Credits 记录，这时使用原版公式：本周期 Credits ÷ 官方已用比例。
 
 ### 明细表
 
-分为「本周期每日用量」和「周期外历史用量」两张表，列依次为：日期、额度占比、总 Tokens、输入 Tokens、缓存命中、折算 Credits、轮数。按 Tokens 推算时，「折算 Credits」列会换成「每 1% Tokens」。
+分为「本周期每日用量」和「周期外历史用量」两张表，列依次为：日期、折算 Credits（账号有真实 Credits 时显示 Credits）、总 Tokens、输入 Tokens、缓存命中、折算金额、轮数。
 
 ### Meter 图表
 
@@ -179,7 +180,7 @@ git clone https://github.com/Goldfish76/codex-meter.git
 
 ### 导出与管理
 
-- 弹窗底部的 **CSV / JSON** 按钮导出最近一次的数据。CSV 包含 `limit_percent`（额度占比）和 `estimated_credits`（折算 Credits）两列。
+- 弹窗底部的 **CSV / JSON** 按钮导出最近一次的数据。CSV 包含 `estimated_credits`（折算 Credits）列。
 - 点工具栏上的 Codex Meter 图标打开管理面板，可以开关「页面内按钮」和「图表控制」、设置「默认图表」（官方或 Meter），以及查看「本地快照」、导出 JSON 或清空历史。
 
 ## 更新与卸载
@@ -208,11 +209,11 @@ git clone https://github.com/Goldfish76/codex-meter.git
 
 **一直显示「同步中」？**
 
-说明这个周期还没有可用的每日数据（例如刚重置），或者新接口暂时不可用。过一段时间再点「刷新」。
+说明这个周期还没有用量（例如刚重置）。用过之后再点「刷新」。
 
-**「本周期已统计额度」比官方比例低很多？**
+**「推算周总 Credits」看起来偏低？**
 
-每日明细有延迟，这是正常的。推算只用每日明细里的 Tokens 和百分比之比，两者同源，所以受延迟影响很小。
+每日明细比官方比例滞后几个小时：官方比例已经算上了刚用掉的额度，每日明细里还没有。过几个小时再点「刷新」，推算值会回升。前缀显示「低可信」时尤其如此。
 
 **浏览器启动时提示停用开发者模式的扩展？**
 
@@ -236,6 +237,7 @@ git clone https://github.com/Goldfish76/codex-meter.git
 - 官方说明价目表本身并不决定套餐内额度。本扩展的换算是根据每日明细反推出来的**经验估计**，不是官方数字。
 - 价目表会变化。例如 GPT-5.6 Sol 目前是促销价（至少到 2026-11-21），GPT-5.5 将于 2026-10-14 下线。价格变化后需要更新 `CREDIT_RATES`。
 - 多个模型混用的日子，假设各模型的 Tokens 构成相近，会有一定误差。
+- 每日明细比官方比例滞后几个小时。周期刚开始，或刚集中用掉大量额度时，推算值会偏低。
 - US$40 / 1000 Credits 是原项目的换算假设，仅作参考。
 
 ## 开发
@@ -268,16 +270,17 @@ node -e "JSON.parse(require('fs').readFileSync('codex-meter-extension/manifest.j
 
 The daily usage endpoint now reports `credits: 0` for usage covered by the plan, so the original "Projected weekly Credits" and "Projected weekly value" cards stay on "Syncing" forever. This fork:
 
-- Reads `/backend-api/wham/usage/daily-token-usage-breakdown`, the endpoint behind the official "by source" chart. It reports each day's usage per model as a percent of the weekly limit.
-- Prices each day's tokens with the [official Codex rate card](https://learn.chatgpt.com/docs/pricing) to estimate how many Credits 1% of the weekly limit is worth. This restores "Projected weekly Credits" and "Projected weekly value".
+- Prices each day's tokens with the [official Codex rate card](https://learn.chatgpt.com/docs/pricing). When a day mixes models, the tokens are split by each model's share from `/backend-api/wham/usage/daily-token-usage-breakdown`, the endpoint behind the official "by source" chart. Its values are relative to the busiest day of the requested range, not to the weekly limit, so only the per-model shares are used.
+- Restores "Projected weekly Credits" and "Projected weekly value" with the original formula (cycle Credits ÷ official used percent), using the estimated Credits.
 - Adds:
   - remaining Credits under the remaining-percent card
-  - a "Limit used (daily details)" card
-  - "Limit %" and "Est. Credits" columns in the daily tables
-  - estimated Credits in the Meter chart
-  - `limit_percent` and `estimated_credits` CSV columns
-- Falls back to token-based projections for models missing from the rate card. Accounts that report real Credits keep the original formula. If the new endpoint fails, the extension shows "Syncing" as before.
+  - an "Estimated Credits this cycle" card
+  - estimated Credits and value in the daily tables and the Meter chart
+  - an `estimated_credits` CSV column
+- Falls back to token-based projections (cycle Tokens ÷ official used percent) for models missing from the rate card, or when the breakdown endpoint fails. Accounts that report real Credits keep the original formula.
 - Removes the original author's Chrome Web Store publishing workflow.
+
+> **v0.3.1 correction:** v0.3.0 treated the breakdown values as percent of the weekly limit. They are relative to the busiest day of the requested range, so the projected weekly Credits and value in v0.3.0 were wrong. Please update to v0.3.1.
 
 ## Install
 
@@ -298,7 +301,7 @@ To update, download again (or `git pull`) and click **Reload** on the extension 
 
 ## Limits
 
-This is an unofficial tool that depends on private ChatGPT Web endpoints. The Credit conversion is an empirical estimate derived from the daily breakdown, not an official number. OpenAI states that credit prices alone do not determine included usage. The rate card in `codex-meter-extension/shared/config.js` needs updating when prices or models change. US$40 per 1,000 Credits is the original project's assumption.
+This is an unofficial tool that depends on private ChatGPT Web endpoints. The Credit conversion is an empirical estimate derived from the daily breakdown, not an official number. OpenAI states that credit prices alone do not determine included usage. The rate card in `codex-meter-extension/shared/config.js` needs updating when prices or models change. Daily details lag the official percent by a few hours, so projections early in a cycle or right after heavy use read low. US$40 per 1,000 Credits is the original project's assumption.
 
 ## License
 

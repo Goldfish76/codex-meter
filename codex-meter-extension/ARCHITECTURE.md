@@ -6,13 +6,13 @@ This extension is intentionally buildless, so each layer is loaded as a classic 
 
 - `domain/usage-domain.js`
   - Pure usage rules: token totals, input totals, cache ratio, limit-window normalization, cycle stats, compact report shape, and numeric formatting.
-  - Estimates the Credits that 1% of the weekly limit is worth from a day's tokens, its per-model limit percent, and the rate card (`creditsPerLimitPercent`).
+  - Estimates a day's Credits from its tokens, the per-model shares of the daily breakdown, and the rate card (`estimateDailyCredits`).
   - Does not read DOM, call Chrome APIs, or fetch network data.
 
 - `application/report-service.js`
   - The report refresh use case.
   - Coordinates the ChatGPT client, domain calculations, and report repository.
-  - Merges the daily limit-percent breakdown into the daily usage rows (`limit_percent`, `estimated_credits`).
+  - Adds rate-card Credit estimates to the daily usage rows (`estimated_credits`).
   - Owns the workflow, not the rendering.
 
 - `infrastructure/chatgpt-client.js`

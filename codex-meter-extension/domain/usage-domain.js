@@ -125,11 +125,7 @@
       (sum, row) => {
         const rowTotals = row.totals || {};
         sum.credits += n(rowTotals.credits);
-        sum.limitPercent += n(rowTotals.limit_percent);
-        if (rowTotals.estimated_credits != null) {
-          sum.estimatedCredits += n(rowTotals.estimated_credits);
-          sum.estimatedPercent += n(rowTotals.limit_percent);
-        }
+        sum.estimatedCredits += n(rowTotals.estimated_credits);
         sum.turns += n(rowTotals.turns);
         sum.threads += n(rowTotals.threads);
         sum.tokens += tokenTotal(rowTotals);
@@ -140,9 +136,7 @@
       },
       {
         credits: 0,
-        limitPercent: 0,
         estimatedCredits: 0,
-        estimatedPercent: 0,
         turns: 0,
         threads: 0,
         tokens: 0,
@@ -154,23 +148,20 @@
     totals.cacheRatio = totals.inputTokens > 0 ? totals.cachedInputTokens / totals.inputTokens : 0;
     totals.creditsPerMillionTokens =
       totals.tokens > 0 ? totals.credits / (totals.tokens / 1e6) : 0;
-    totals.tokensPerLimitPercent =
-      totals.limitPercent > 0 ? totals.tokens / totals.limitPercent : 0;
-    totals.creditsPerLimitPercent =
-      totals.estimatedPercent > 0 ? totals.estimatedCredits / totals.estimatedPercent : 0;
     return totals;
   };
 
-  // What 1% of the weekly limit is worth in Credits on one day: price the day's
-  // tokens with the rate card, split across models by their share of the day's
-  // limit percent (assumes a similar token mix per model).
-  const creditsPerLimitPercent = (totals = {}, models = [], { rates = {}, speedMultipliers = {} } = {}) => {
+  // A day's Credits priced with the rate card, for days whose counts report 0.
+  // Tokens are split across models by each model's share of the day's breakdown
+  // value (assumes a similar token mix per model); the breakdown values are only
+  // relative, so nothing but these shares is used.
+  const estimateDailyCredits = (totals = {}, models = [], { rates = {}, speedMultipliers = {} } = {}) => {
     const uncached = n(totals.uncached_text_input_tokens) / 1e6;
     const cached = n(totals.cached_text_input_tokens) / 1e6;
     const output = n(totals.text_output_tokens) / 1e6;
     let totalShare = 0;
     let pricedShare = 0;
-    let percentPerCredit = 0;
+    let sharePerCredit = 0;
     for (const entry of models) {
       const share = n(entry?.credits);
       if (share <= 0) continue;
@@ -181,10 +172,10 @@
       const credits = (uncached * rate[0] + cached * rate[1] + output * rate[2]) * multiplier;
       if (credits <= 0) continue;
       pricedShare += share;
-      percentPerCredit += share / credits;
+      sharePerCredit += share / credits;
     }
-    if (percentPerCredit <= 0 || pricedShare < totalShare * 0.8) return null;
-    return 1 / percentPerCredit;
+    if (sharePerCredit <= 0 || pricedShare < totalShare * 0.8) return null;
+    return totalShare / sharePerCredit;
   };
 
   const compactReport = (report) => ({
@@ -209,7 +200,7 @@
     addDays,
     cacheRatio,
     compactReport,
-    creditsPerLimitPercent,
+    estimateDailyCredits,
     extractLimitWindows,
     formatCredits,
     formatNumber,

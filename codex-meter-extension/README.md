@@ -6,9 +6,9 @@ This is an improved fork of [Wangnov/codex-meter](https://github.com/Wangnov/cod
 
 ## Changes in this fork
 
-- Plans whose daily usage reports `credits: 0` get their usage from `/backend-api/wham/usage/daily-token-usage-breakdown`, which gives each day's usage per model as a percent of the weekly limit.
-- Daily tokens are priced with the Codex credit rate card in `shared/config.js`. That gives the Credits that 1% of the weekly limit is worth, which restores the projected weekly Credits and value.
-- If a model is missing from the rate card, the projections fall back to tokens. Accounts that report real Credits keep the original formula.
+- Plans whose daily usage reports `credits: 0` get estimated Credits. Each day's tokens are priced with the Codex credit rate card in `shared/config.js` and split across models by the shares from `/backend-api/wham/usage/daily-token-usage-breakdown`. That endpoint's values are relative to the busiest day of the requested range, so only the shares are used.
+- The projected weekly Credits and value use the original formula with the estimated Credits: cycle Credits ÷ official used percent.
+- If a model is missing from the rate card, or the breakdown endpoint fails, the projections fall back to tokens. Accounts that report real Credits keep the original formula.
 
 ## What It Does
 

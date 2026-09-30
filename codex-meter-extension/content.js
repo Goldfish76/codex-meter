@@ -174,12 +174,11 @@
         projectionLag: "每日明细可能滞后，稍后更稳。",
         cache: ["输入缓存命中率", "缓存输入占全部输入 Tokens 的比例。"],
         usd: ["推算周价值", "按推算周 Credits × US$40/1000 估算。"],
-        limitPercent: ["本周期已统计额度", "来自官方按来源的每日明细，可能比官方比例滞后。"],
-        projectedTokens: ["推算周总 Tokens", "{confidence}：本周期 Tokens ÷ 每日额度占比，1% ≈ {perPercent} Tokens。"],
-        remainingTokens: ["推算剩余 Tokens", "官方剩余比例 × 每 1% Tokens，随模型组合变化。"],
-        limitPercentCredits: "约合 {credits} Credits；来自每日明细，可能比官方比例滞后。",
+        estimatedCredits: ["本周期折算 Credits", "官方每日明细记为 0，这里按官方价目表把每日 Tokens 折算成 Credits。"],
+        projectedEstimated: "{confidence}：每日折算 Credits ÷ 官方已用比例。",
         remainingCredits: "来自官方每周限额进度，约合 {credits} Credits。",
-        projectedFromRates: "{confidence}：按官方价目表把每日 Tokens 折算成 Credits，1% ≈ {perPercent} Credits。",
+        projectedTokens: ["推算周总 Tokens", "{confidence}：本周期 Tokens ÷ 官方已用比例，随模型组合变化。"],
+        remainingTokens: ["推算剩余 Tokens", "官方剩余比例 × 推算周总 Tokens。"],
       },
       table: {
         empty: "这个时间段还没有 Codex 用量记录。",
@@ -190,8 +189,6 @@
         cache: "缓存命中",
         usd: "折算金额",
         turns: "轮数",
-        limitPercent: "额度占比",
-        tokensPerPercent: "每 1% Tokens",
         estimatedCredits: "折算 Credits",
         total: "合计",
       },
@@ -381,12 +378,11 @@
         projectionLag: "Daily details may lag; refresh later.",
         cache: ["Input cache hit rate", "Cached input as a share of all input Tokens."],
         usd: ["Projected weekly value", "Based on projected weekly Credits at US$40/1000."],
-        limitPercent: ["Limit used (daily details)", "From the official by-source daily breakdown; may lag the official percent."],
-        projectedTokens: ["Projected weekly Tokens", "{confidence}: cycle Tokens ÷ daily limit percent; 1% ≈ {perPercent} Tokens."],
-        remainingTokens: ["Projected remaining Tokens", "Official remaining percent × Tokens per 1%; varies with model mix."],
-        limitPercentCredits: "≈ {credits} Credits; from the daily breakdown, may lag the official percent.",
+        estimatedCredits: ["Estimated Credits this cycle", "The daily counts report 0, so daily Tokens are priced with the official rate card."],
+        projectedEstimated: "{confidence}: estimated daily Credits ÷ official used percent.",
         remainingCredits: "From the official weekly limit progress; ≈ {credits} Credits.",
-        projectedFromRates: "{confidence}: daily Tokens priced with the official rate card; 1% ≈ {perPercent} Credits.",
+        projectedTokens: ["Projected weekly Tokens", "{confidence}: cycle Tokens ÷ official used percent; varies with model mix."],
+        remainingTokens: ["Projected remaining Tokens", "Official remaining percent × projected weekly Tokens."],
       },
       table: {
         empty: "No Codex usage was recorded in this date range.",
@@ -397,8 +393,6 @@
         cache: "Cache hit",
         usd: "Estimated value",
         turns: "Turns",
-        limitPercent: "Limit %",
-        tokensPerPercent: "Tokens per 1%",
         estimatedCredits: "Est. Credits",
         total: "Total",
       },
@@ -1683,7 +1677,6 @@
 
   const emptyUsageTotals = () => ({
     credits: 0,
-    limit_percent: 0,
     estimated_credits: 0,
     turns: 0,
     threads: 0,
@@ -1695,7 +1688,6 @@
 
   const addUsageTotals = (target, totals = {}) => {
     target.credits += n(totals.credits);
-    target.limit_percent += n(totals.limit_percent);
     target.estimated_credits += n(totals.estimated_credits);
     target.turns += n(totals.turns);
     target.threads += n(totals.threads);
@@ -2203,23 +2195,16 @@
     report.primaryWindow ||
     null;
 
-  const rowCredits = (row) => n(row?.totals?.credits);
+  const rowCredits = (row) => n(row?.totals?.credits) || n(row?.totals?.estimated_credits);
 
-  const isPercentMetered = (stats = {}) => n(stats.credits) <= 0 && n(stats.limitPercent) > 0;
+  // Plan-covered usage reports 0 Credits; fall back to the rate-card estimate.
+  const usesEstimatedCredits = (stats = {}) => n(stats.credits) <= 0 && n(stats.estimatedCredits) > 0;
 
-  const percentDetailColumn = (stats) =>
-    n(stats.creditsPerLimitPercent) > 0
-      ? {
-          label: t("table.estimatedCredits"),
-          row: (totals) => (totals.estimated_credits != null ? fmtCredits(totals.estimated_credits, 1) : "—"),
-          total: () => fmtCredits(stats.estimatedCredits, 1),
-        }
-      : {
-          label: t("table.tokensPerPercent"),
-          row: (totals) =>
-            n(totals.limit_percent) > 0 ? fmtNum(tokenTotal(totals) / n(totals.limit_percent)) : "—",
-          total: () => fmtNum(stats.tokensPerLimitPercent),
-        };
+  const statsCredits = (stats = {}) =>
+    usesEstimatedCredits(stats) ? n(stats.estimatedCredits) : n(stats.credits);
+
+  const totalsCredits = (totals = {}, estimated = false) =>
+    estimated ? n(totals.estimated_credits) : n(totals.credits);
 
   const sumValues = (values) => values.reduce((sum, value) => sum + n(value), 0);
 
@@ -2230,8 +2215,8 @@
     return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
   };
 
-  const confidenceForProjection = ({ cycleAgeHours, estimate, recent7Credits, recentMedianCredits, stats, usedPercent }) => {
-    const dailyLooksIncomplete = recentMedianCredits > 0 && n(stats.credits) < recentMedianCredits * 0.2;
+  const confidenceForProjection = ({ currentCredits, cycleAgeHours, estimate, recent7Credits, recentMedianCredits, usedPercent }) => {
+    const dailyLooksIncomplete = recentMedianCredits > 0 && currentCredits < recentMedianCredits * 0.2;
     const estimateLooksTooLow = recent7Credits > 0 && estimate < recent7Credits * 0.25;
     if (
       usedPercent < 10 ||
@@ -2254,54 +2239,31 @@
     return cycleStartMs != null ? Math.max(0, (capturedMs - cycleStartMs) / 36e5) : null;
   };
 
-  // Without Credits, project from the daily limit percent: price the daily Tokens
-  // with the rate card, or fall back to raw Tokens for unknown models. Both sides
-  // come from the daily details, so the ratio holds even while those lag.
-  const percentProjection = (report, stats, window) => {
-    const limitPercent = n(stats.limitPercent);
+  // Without Credits or a rate-card estimate (unknown models), project raw Tokens.
+  const tokenProjection = (report, stats, window) => {
+    const usedPercent = n(window?.usedPercent);
+    const estimate = n(stats.tokens) / (usedPercent / 100);
     const cycleAgeHours = cycleAgeHoursFor(report, window);
     const confidence =
-      limitPercent < 10 || (cycleAgeHours != null && cycleAgeHours < 8)
+      usedPercent < 10 || (cycleAgeHours != null && cycleAgeHours < 8)
         ? "low"
-        : limitPercent < 20 || (cycleAgeHours != null && cycleAgeHours < 24)
+        : usedPercent < 20 || (cycleAgeHours != null && cycleAgeHours < 24)
           ? "medium"
           : "high";
-    const confidenceLabel = t(`metrics.projectionConfidence.${confidence}`);
-    const creditsPerPercent = n(stats.creditsPerLimitPercent);
-    if (creditsPerPercent > 0) {
-      const estimate = creditsPerPercent * 100;
-      return {
-        canEstimate: true,
-        confidence,
-        estimate,
-        creditsPerPercent,
-        value: escapeHtml(`~${fmtCredits(estimate, 0)}`),
-        hint: t("metrics.projectedFromRates", {
-          confidence: confidenceLabel,
-          perPercent: fmtCredits(creditsPerPercent, 1),
-        }),
-        usdValue: escapeHtml(fmtUsd(estimate)),
-        usdHint: t("metrics.usd.1"),
-      };
-    }
-    const tokensPerPercent = n(stats.tokensPerLimitPercent);
-    const estimate = tokensPerPercent * 100;
     const remainingPercent = window?.remainingPercent;
     return {
       canEstimate: true,
       confidence,
       estimate,
+      unit: "tokens",
       label: t("metrics.projectedTokens.0"),
       value: escapeHtml(`~${fmtNum(estimate, 0)}`),
-      hint: t("metrics.projectedTokens.1", {
-        confidence: confidenceLabel,
-        perPercent: fmtNum(tokensPerPercent),
-      }),
+      hint: t("metrics.projectedTokens.1", { confidence: t(`metrics.projectionConfidence.${confidence}`) }),
       usdLabel: t("metrics.remainingTokens.0"),
       usdValue:
         remainingPercent == null
           ? "N/A"
-          : escapeHtml(`~${fmtNum(tokensPerPercent * remainingPercent, 0)}`),
+          : escapeHtml(`~${fmtNum((estimate * remainingPercent) / 100, 0)}`),
       usdHint: t("metrics.remainingTokens.1"),
     };
   };
@@ -2310,11 +2272,14 @@
     const stats = report.currentStats || {};
     const window = weeklyLimitWindow(report);
     const usedPercent = window?.usedPercent;
-    const currentCredits = n(stats.credits);
-    if (isPercentMetered(stats) && n(stats.tokens) > 0) return percentProjection(report, stats, window);
+    const estimated = usesEstimatedCredits(stats);
+    const currentCredits = statsCredits(stats);
     const canEstimate = usedPercent != null && usedPercent > 0 && currentCredits > 0;
 
     if (!canEstimate) {
+      if (usedPercent > 0 && n(stats.credits) <= 0 && n(stats.tokens) > 0) {
+        return tokenProjection(report, stats, window);
+      }
       return {
         canEstimate,
         estimate: null,
@@ -2335,16 +2300,16 @@
     const recentMedianCredits = medianValue(recentCredits);
     const cycleAgeHours = cycleAgeHoursFor(report, window);
     const confidence = confidenceForProjection({
+      currentCredits,
       cycleAgeHours,
       estimate,
       recent7Credits,
       recentMedianCredits,
-      stats,
       usedPercent,
     });
     const confidenceLabel = t(`metrics.projectionConfidence.${confidence}`);
     const hint = [
-      t("metrics.projected.1", { confidence: confidenceLabel }),
+      t(estimated ? "metrics.projectedEstimated" : "metrics.projected.1", { confidence: confidenceLabel }),
       confidence === "low" ? t("metrics.projectionLag") : "",
     ]
       .filter(Boolean)
@@ -2354,6 +2319,7 @@
       canEstimate,
       confidence,
       estimate,
+      unit: "credits",
       value: escapeHtml(`~${fmtCredits(estimate, digits)}`),
       hint,
       usdValue: escapeHtml(fmtUsd(estimate)),
@@ -2366,20 +2332,15 @@
     const weeklyWindow = weeklyLimitWindow(report);
     const projection = weeklyProjection(report);
     const remaining = weeklyWindow?.remainingPercent;
-    const creditsPerPercent = n(projection.creditsPerPercent);
     const remainingHint =
-      creditsPerPercent > 0 && remaining != null
-        ? t("metrics.remainingCredits", { credits: fmtCredits(creditsPerPercent * remaining, 0) })
+      projection.unit === "credits" && remaining != null
+        ? t("metrics.remainingCredits", { credits: fmtCredits((projection.estimate * remaining) / 100, 0) })
         : t("metrics.remaining.1");
-    const limitPercentHint =
-      creditsPerPercent > 0
-        ? t("metrics.limitPercentCredits", { credits: fmtCredits(stats.estimatedCredits, 0) })
-        : t("metrics.limitPercent.1");
     return `
       <div class="cqc-grid">
         ${renderMetricCard("gauge", t("metrics.remaining.0"), remaining == null ? "N/A" : `${remaining.toFixed(1)}%`, "fresh", true, remainingHint)}
-        ${isPercentMetered(stats)
-          ? renderMetricCard("coins", t("metrics.limitPercent.0"), `${n(stats.limitPercent).toFixed(1)}%`, "mint", false, limitPercentHint)
+        ${usesEstimatedCredits(stats)
+          ? renderMetricCard("coins", t("metrics.estimatedCredits.0"), fmtCredits(stats.estimatedCredits, 2), "mint", false, t("metrics.estimatedCredits.1"))
           : renderMetricCard("coins", t("metrics.credits.0"), fmtCredits(stats.credits, 2), "mint", false, t("metrics.credits.1"))}
         ${renderMetricCard("cpu", t("metrics.tokens.0"), fmtNum(stats.tokens), "blue", false, t("metrics.tokens.1"))}
         ${renderMetricCard("trendingUp", projection.label || t("metrics.projected.0"), projection.value, "amber", false, projection.hint)}
@@ -2410,8 +2371,8 @@
 
   const renderTable = (rows, stats) => {
     if (!rows.length) return `<div class="cqc-empty">${icon("table")}<span>${escapeHtml(t("table.empty"))}</span></div>`;
-    const percentMode = isPercentMetered(stats);
-    const detailColumn = percentMode ? percentDetailColumn(stats) : null;
+    const estimated = usesEstimatedCredits(stats);
+    const totalCredits = statsCredits(stats);
     return `
       <div class="cqc-table-wrap">
         <table class="cqc-table">
@@ -2427,11 +2388,11 @@
           <thead>
             <tr>
               <th>${escapeHtml(t("table.date"))}</th>
-              <th>${escapeHtml(t(percentMode ? "table.limitPercent" : "table.credits"))}</th>
+              <th>${escapeHtml(t(estimated ? "table.estimatedCredits" : "table.credits"))}</th>
               <th>${escapeHtml(t("table.tokens"))}</th>
               <th>${escapeHtml(t("table.inputTokens"))}</th>
               <th>${escapeHtml(t("table.cache"))}</th>
-              <th>${escapeHtml(detailColumn ? detailColumn.label : t("table.usd"))}</th>
+              <th>${escapeHtml(t("table.usd"))}</th>
               <th>${escapeHtml(t("table.turns"))}</th>
             </tr>
           </thead>
@@ -2440,16 +2401,15 @@
               .reverse()
               .map((row) => {
                 const totals = row.totals || {};
-                const credits = n(totals.credits);
-                const limitPercent = n(totals.limit_percent);
+                const credits = totalsCredits(totals, estimated);
                 return `
                   <tr>
                     <td>${escapeHtml(row.date)}</td>
-                    <td class="cqc-mono">${percentMode ? `${limitPercent.toFixed(2)}%` : fmtCredits(credits)}</td>
+                    <td class="cqc-mono">${fmtCredits(credits)}</td>
                     <td class="cqc-mono">${fmtNum(tokenTotal(totals))}</td>
                     <td class="cqc-mono">${fmtNum(tokenInput(totals))}</td>
                     <td class="cqc-mono">${(cacheRatio(totals) * 100).toFixed(0)}%</td>
-                    <td>${escapeHtml(detailColumn ? detailColumn.row(totals) : fmtUsd(credits))}</td>
+                    <td>${escapeHtml(fmtUsd(credits))}</td>
                     <td>${escapeHtml(totals.turns || 0)}</td>
                   </tr>
                 `;
@@ -2459,11 +2419,11 @@
           <tfoot>
             <tr>
               <td>${escapeHtml(t("table.total"))}</td>
-              <td class="cqc-mono">${percentMode ? `${n(stats.limitPercent).toFixed(2)}%` : fmtCredits(stats.credits)}</td>
+              <td class="cqc-mono">${fmtCredits(totalCredits)}</td>
               <td class="cqc-mono">${fmtNum(stats.tokens)}</td>
               <td class="cqc-mono">${fmtNum(stats.inputTokens)}</td>
               <td class="cqc-mono">${(stats.cacheRatio * 100).toFixed(0)}%</td>
-              <td>${escapeHtml(detailColumn ? detailColumn.total() : fmtUsd(stats.credits))}</td>
+              <td>${escapeHtml(fmtUsd(totalCredits))}</td>
               <td>${escapeHtml(stats.turns)}</td>
             </tr>
           </tfoot>
@@ -2495,7 +2455,6 @@
       [
         "date",
         "credits",
-        "limit_percent",
         "estimated_credits",
         "tokens",
         "input_tokens",
@@ -2511,7 +2470,6 @@
         return [
           row.date,
           credits,
-          n(totals.limit_percent),
           totals.estimated_credits != null ? n(totals.estimated_credits).toFixed(2) : "",
           tokenTotal(totals),
           tokenInput(totals),
@@ -2979,8 +2937,8 @@
   const renderChartTooltipDetail = (rows) => {
     const sorted = [...rows].sort((a, b) => String(a.date).localeCompare(String(b.date)));
     const stats = domain.getStats(sorted);
-    const percentMode = isPercentMetered(stats);
-    const detailColumn = percentMode ? percentDetailColumn(stats) : null;
+    const estimated = usesEstimatedCredits(stats);
+    const credits = statsCredits(stats);
     const dateLabel =
       sorted.length === 1
         ? sorted[0].date
@@ -2988,11 +2946,11 @@
     return `
       <div class="cqc-chart-tooltip-title">Codex Meter · ${escapeHtml(dateLabel)}</div>
       <div class="cqc-chart-tooltip-grid">
-        <span>${escapeHtml(t(percentMode ? "table.limitPercent" : "table.credits"))}</span><strong>${percentMode ? `${n(stats.limitPercent).toFixed(2)}%` : fmtCredits(stats.credits)}</strong>
+        <span>${escapeHtml(t(estimated ? "table.estimatedCredits" : "table.credits"))}</span><strong>${fmtCredits(credits)}</strong>
         <span>${escapeHtml(t("table.tokens"))}</span><strong>${fmtNum(stats.tokens)}</strong>
         <span>${escapeHtml(t("table.inputTokens"))}</span><strong>${fmtNum(stats.inputTokens)}</strong>
         <span>${escapeHtml(t("table.cache"))}</span><strong>${(stats.cacheRatio * 100).toFixed(0)}%</strong>
-        <span>${escapeHtml(detailColumn ? detailColumn.label : t("table.usd"))}</span><strong>${escapeHtml(detailColumn ? detailColumn.total() : fmtUsd(stats.credits))}</strong>
+        <span>${escapeHtml(t("table.usd"))}</span><strong>${escapeHtml(fmtUsd(credits))}</strong>
         <span>${escapeHtml(t("table.turns"))}</span><strong>${escapeHtml(stats.turns)}</strong>
       </div>
     `;
