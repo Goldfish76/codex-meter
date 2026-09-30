@@ -1,6 +1,14 @@
 # Codex Meter
 
-Local Chrome extension for the ChatGPT Codex analytics page.
+Local Chrome / Edge extension for the ChatGPT Codex analytics page.
+
+This is an improved fork of [Wangnov/codex-meter](https://github.com/Wangnov/codex-meter). See the [root README](../README.md) for the full install and usage guide (Chinese and English).
+
+## Changes in this fork
+
+- Plans whose daily usage reports `credits: 0` get their usage from `/backend-api/wham/usage/daily-token-usage-breakdown`, which gives each day's usage per model as a percent of the weekly limit.
+- Daily tokens are priced with the Codex credit rate card in `shared/config.js`. That gives the Credits that 1% of the weekly limit is worth, which restores the projected weekly Credits and value.
+- If a model is missing from the rate card, the projections fall back to tokens. Accounts that report real Credits keep the original formula.
 
 ## What It Does
 
@@ -20,7 +28,7 @@ The extension does not store the ChatGPT Web bearer token. It extracts the token
 
 ## Install
 
-1. Open `chrome://extensions`.
+1. Open `chrome://extensions` (Chrome) or `edge://extensions` (Edge).
 2. Enable `Developer mode`.
 3. Click `Load unpacked`.
 4. Select the cloned extension folder:
