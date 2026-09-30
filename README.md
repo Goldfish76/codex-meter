@@ -12,6 +12,7 @@
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-2ea44f" alt="MIT license"></a>
   <a href="https://github.com/Wangnov/codex-meter"><img src="https://img.shields.io/badge/fork%20of-Wangnov%2Fcodex--meter-555555?logo=github" alt="Fork of Wangnov/codex-meter"></a>
   <img src="https://img.shields.io/badge/Chrome%20%7C%20Edge-MV3-4285f4?logo=googlechrome&logoColor=white" alt="Chrome / Edge MV3">
+  <a href="https://github.com/Goldfish76/codex-meter/releases/latest"><img src="https://img.shields.io/github/v/release/Goldfish76/codex-meter" alt="Latest release"></a>
 </p>
 
 <p align="center">
@@ -99,15 +100,18 @@
 
 ### 第 1 步：下载扩展
 
-**方式 A：下载 ZIP（不需要 Git，推荐）**
+**方式 A：从 Releases 下载（推荐）**
 
-1. 打开本仓库主页 <https://github.com/Goldfish76/codex-meter>。
-2. 点绿色的 **「Code」** 按钮，再点 **「Download ZIP」**，得到 `codex-meter-main.zip`。
-3. 把 ZIP 解压到一个**固定的位置**，例如 `文档\codex-meter-main`。
+1. 打开 [Releases 页面](https://github.com/Goldfish76/codex-meter/releases/latest)，在 **Assets** 里下载 `codex-meter-extension-vX.Y.Z.zip`（当前为 v0.3.0）。
+2. 把它解压到一个**固定的位置**，例如 `文档\codex-meter-extension`。在 Windows 上可以右键 zip，选「全部解压缩」。解压出来的文件夹里应该直接就有 `manifest.json`。
 
 > ⚠️ 浏览器是直接从这个文件夹加载扩展的。装好后**不要删除、移动或重命名**这个文件夹，否则扩展会失效。
 
-**方式 B：用 Git 克隆**
+**方式 B：下载源码 ZIP**
+
+在仓库主页点绿色的 **「Code」** 按钮，再点 **「Download ZIP」**。解压后得到 `codex-meter-main` 文件夹，扩展在其中的 `codex-meter-extension` 子文件夹里。
+
+**方式 C：用 Git 克隆**
 
 ```bash
 git clone https://github.com/Goldfish76/codex-meter.git
@@ -124,8 +128,9 @@ git clone https://github.com/Goldfish76/codex-meter.git
 1. 在地址栏输入 `edge://extensions` 并回车。
 2. 打开左侧栏底部的 **「开发人员模式」** 开关。
 3. 点页面上方出现的 **「加载解压缩的扩展」**。
-4. 选择 `codex-meter-extension` 文件夹，也就是里面有 `manifest.json` 的那一层：
-   - ZIP 方式：`codex-meter-main\codex-meter-extension`
+4. 选择里面直接有 `manifest.json` 的那个文件夹：
+   - Releases 方式：第 1 步解压出来的文件夹
+   - 源码 ZIP 方式：`codex-meter-main\codex-meter-extension`
    - Git 方式：`codex-meter\codex-meter-extension`
 5. 列表里出现 **Codex Meter 0.3.0**，并且开关是打开的，就装好了。
 
@@ -134,7 +139,7 @@ git clone https://github.com/Goldfish76/codex-meter.git
 1. 在地址栏输入 `chrome://extensions` 并回车。
 2. 打开右上角的 **「开发者模式」** 开关。
 3. 点左上角的 **「加载已解压的扩展程序」**。
-4. 同样选择 `codex-meter-extension` 文件夹。
+4. 同样选择里面直接有 `manifest.json` 的那个文件夹。
 5. 列表里出现 **Codex Meter 0.3.0**，就装好了。
 
 ### 第 4 步：固定到工具栏（可选）
@@ -181,7 +186,7 @@ git clone https://github.com/Goldfish76/codex-meter.git
 
 **更新**
 
-- ZIP 方式：重新下载 ZIP，解压后覆盖原来的文件夹（路径保持不变）。然后在扩展管理页，Edge 点 Codex Meter 卡片上的 **「重新加载」**，Chrome 点卡片上的刷新图标。
+- Releases 或源码 ZIP 方式：下载新版本，把文件解压覆盖到原来的文件夹里（路径保持不变）。然后在扩展管理页，Edge 点 Codex Meter 卡片上的 **「重新加载」**，Chrome 点卡片上的刷新图标。
 - Git 方式：在仓库目录运行下面的命令，再同样点「重新加载」：
 
   ```bash
@@ -276,10 +281,10 @@ The daily usage endpoint now reports `credits: 0` for usage covered by the plan,
 
 ## Install
 
-1. Download this repository: **Code → Download ZIP**, then unzip it to a permanent folder. Or run `git clone https://github.com/Goldfish76/codex-meter.git`.
+1. Download `codex-meter-extension-vX.Y.Z.zip` from the [latest release](https://github.com/Goldfish76/codex-meter/releases/latest) and unzip it to a permanent folder. You can also use **Code → Download ZIP** or `git clone https://github.com/Goldfish76/codex-meter.git`.
 2. If you installed the original Codex Meter from the Chrome Web Store, turn it off first.
 3. Open `edge://extensions` (Edge) or `chrome://extensions` (Chrome) and turn on **Developer mode**.
-4. Click **Load unpacked** and select the `codex-meter-extension` folder, the one that contains `manifest.json`.
+4. Click **Load unpacked** and select the folder that directly contains `manifest.json`.
 
 Keep the folder in place after installing. The browser loads the extension from it.
 
